@@ -1,301 +1,308 @@
-#include "raylib.h"
-#include <math.h>
+#include <stdio.h>
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
-#include <stdio.h>
-#include <stdlib.h>
 #include <math.h>
-const int G = 10000;
+int mainmenu = 1;
+int integrator;
 
-#define MAX_TRAIL 3000 // Maximum number of trail points
-int mainmenu = 0;
-typedef enum
-{
-    PLAY,
-    PAUSE
-} state;
-
-state gamestate = PAUSE;
+const double G = 0.2;
 
 typedef struct
 {
-    double x, y;
-    double vx, vy;
-} body;
+    double x, y, vx, vy, m, r;
+} Body;
 
 typedef struct
 {
     double x, y;
 } Force;
 
-typedef struct
-{
-    float x, y, r, a;
-} star;
-int trail = 1;
-Force computeForce(body a, body b)
+Force computeForce(Body a, Body b)
 {
     double dx = b.x - a.x;
     double dy = b.y - a.y;
-    double r = sqrt(dx * dx + dy * dy); // distance between the centres of the planets
-    double mag = G / (r * r * r);       /// magnitude of the force (vector not included)
+    double r = sqrt(dx * dx + dy * dy)+1e-6;
+    double mag = (G * a.m * b.m) / (r * r * r);
     Force f;
     f.x = mag * dx;
     f.y = mag * dy;
     return f;
 }
 
-void collide(body *a, body *b)
+void updatePhysics(int i, int integrator, Force f, double dt, Body p[])
 {
-    double dx = b->x - a->x;
-    double dy = b->y - a->y;
-    double dist2 = dx * dx + dy * dy;
-    if (dist2 == 0)
-        dist2 = 0.01;
-
-    double dvx = a->vx - b->vx;
-    double dvy = a->vy - b->vy;
-
-    double dot = (dvx * dx + dvy * dy) / dist2;
-
-    double vx_a = a->vx - dot * dx;
-    double vy_a = a->vy - dot * dy;
-    double vx_b = b->vx + dot * dx;
-    double vy_b = b->vy + dot * dy;
-
-    a->vx = vx_a;
-    a->vy = vy_a;
-    b->vx = vx_b;
-    b->vy = vy_b;
-
-    // Push apart to avoid sticking
-    double dist = sqrt(dist2);
-    double overlap = 20 - dist;
-    if (overlap > 0)
+    switch (integrator)
     {
-        double nx = dx / dist;
-        double ny = dy / dist;
-        a->x -= nx * overlap / 2;
-        a->y -= ny * overlap / 2;
-        b->x += nx * overlap / 2;
-        b->y += ny * overlap / 2;
+    case 1: // euler
+        p[i].x += p[i].vx * dt;
+        p[i].y += p[i].vy * dt;
+        p[i].vx += (f.x / p[i].m) * dt;
+        p[i].vy += (f.y / p[i].m) * dt;
+        break;
+    case 2: // simplectic euler------------------------
+        p[i].vx += (f.x / p[i].m) * dt;
+        p[i].vy += (f.y / p[i].m) * dt;
+        p[i].x += p[i].vx * dt;
+        p[i].y += p[i].vy * dt;
+        break;
+    case 3: // rk2
+        // a.vx+=f.x*dt/2;
+        Force ftemp = {0, 0};
+        double ax = f.x / p[i].m;
+        double ay = f.y / p[i].m;
+        double xtemp = p[i].x + p[i].vx * dt / 2;
+        double vxtemp = p[i].vx + ax * dt / 2;
+        double ytemp = p[i].y + p[i].vy * dt / 2;
+        double vytemp = p[i].vy + ay * dt / 2;
+        Body tempbody = {xtemp, ytemp, vxtemp, vytemp, p[i].m, 10};
+
+        for (int j = 0; j < 9; j++)
+        {
+            if (j == i)
+                continue;
+            else
+            {
+                ftemp.x += (computeForce(tempbody, p[j])).x;
+                ftemp.y += (computeForce(tempbody, p[j])).y;
+            }
+        }
+        double axmid = ftemp.x / p[i].m;
+        double aymid = ftemp.y / p[i].m;
+        p[i].vx += axmid * dt;
+        p[i].vy += aymid * dt;
+        p[i].x += (p[i].vx + vxtemp) * 0.5 * dt; // optional
+        p[i].y += (p[i].vy + vytemp) * 0.5 * dt;
+        break;
+    case 4: // RK4
+    {
+        // --------------------------------------------------
+        // STEP 0: original state (anchor)
+        // --------------------------------------------------
+        double x0 = p[i].x;
+        double y0 = p[i].y;
+        double vx0 = p[i].vx;
+        double vy0 = p[i].vy;
+        double m = p[i].m;
+
+        // --------------------------------------------------
+        // k1: slopes at original state
+        // --------------------------------------------------
+        double k1_x = vx0;
+        double k1_y = vy0;
+        double k1_vx = f.x / m;
+        double k1_vy = f.y / m;
+
+        // --------------------------------------------------
+        // k2: slopes at half-step using k1
+        // --------------------------------------------------
+        Body s2;
+        s2.x = x0 + k1_x * dt / 2;
+        s2.y = y0 + k1_y * dt / 2;
+        s2.vx = vx0 + k1_vx * dt / 2;
+        s2.vy = vy0 + k1_vy * dt / 2;
+        s2.m = m;
+
+        Force f2 = {0, 0};
+        for (int j = 0; j < 9; j++)
+        {
+            if (j != i)
+            {
+                f2.x += (computeForce(s2, p[j])).x;
+                f2.y += (computeForce(s2, p[j])).y;
+            }
+        }
+
+        double k2_x = s2.vx;
+        double k2_y = s2.vy;
+        double k2_vx = f2.x / m;
+        double k2_vy = f2.y / m;
+
+        // --------------------------------------------------
+        // k3: slopes at half-step using k2
+        // --------------------------------------------------
+        Body s3;
+        s3.x = x0 + k2_x * dt / 2;
+        s3.y = y0 + k2_y * dt / 2;
+        s3.vx = vx0 + k2_vx * dt / 2;
+        s3.vy = vy0 + k2_vy * dt / 2;
+        s3.m = m;
+
+        Force f3 = {0, 0};
+        for (int j = 0; j < 9; j++)
+        {
+            if (j != i)
+            {
+                f3.x += (computeForce(s3, p[j])).x;
+                f3.y += (computeForce(s3, p[j])).y;
+            }
+        }
+
+        double k3_x = s3.vx;
+        double k3_y = s3.vy;
+        double k3_vx = f3.x / m;
+        double k3_vy = f3.y / m;
+
+        // --------------------------------------------------
+        // k4: slopes at full-step using k3
+        // --------------------------------------------------
+        Body s4;
+        s4.x = x0 + k3_x * dt;
+        s4.y = y0 + k3_y * dt;
+        s4.vx = vx0 + k3_vx * dt;
+        s4.vy = vy0 + k3_vy * dt;
+        s4.m = m;
+
+        Force f4 = {0, 0};
+        for (int j = 0; j < 9; j++)
+        {
+            if (j != i)
+            {
+                f4.x += (computeForce(s4, p[j])).x;
+                f4.y += (computeForce(s4, p[j])).y;
+            }
+        }
+
+        double k4_x = s4.vx;
+        double k4_y = s4.vy;
+        double k4_vx = f4.x / m;
+        double k4_vy = f4.y / m;
+
+        // --------------------------------------------------
+        // FINAL UPDATE (single real step)
+        // --------------------------------------------------
+        p[i].x += (dt / 6) * (k1_x + 2 * k2_x + 2 * k3_x + k4_x);
+        p[i].y += (dt / 6) * (k1_y + 2 * k2_y + 2 * k3_y + k4_y);
+        p[i].vx += (dt / 6) * (k1_vx + 2 * k2_vx + 2 * k3_vx + k4_vx);
+        p[i].vy += (dt / 6) * (k1_vy + 2 * k2_vy + 2 * k3_vy + k4_vy);
+
+        break;
+    }
+
+    case 5: // leepfrog
+        break;
+
+    default:
+        break;
     }
 }
-int t = 0; // in order to change the alpha value of the stars
 
 int main()
 {
-    Color black = {0, 0, 0, 200};
-    body b[4];
-    star s[200];
-    InitWindow(1280, 720, "FOUR STAR SYSTEM WITH TRAILS");
-    SetTargetFPS(170);
+    InitWindow(1280, 720, "Solar System");
+    SetTargetFPS(190);
+    Body planet[9];
+    planet[0].x = 648;  // mercury
+    planet[1].x = 654;  // venus
+    planet[2].x = 660;  // earth
+    planet[3].x = 670;  // mars
+    planet[4].x = 744;  // jupiter
+    planet[5].x = 832;  // saturn
+    planet[6].x = 1024; // uranus
+    planet[7].x = 1241; // neptune
+    planet[8].x = 640;  // sun
 
-    // calculating randoom positions for the 200 stars
-    for (int i = 0; i < 200; i++)
+    planet[0].m = 0.0000165; // mercury
+    planet[1].m = 0.000245;  // venus
+    planet[2].m = 0.0003;    // earth
+    planet[3].m = 0.000032;  // mars
+    planet[4].m = 0.0954;    // jupiter
+    planet[5].m = 0.0544;    // saturn
+    planet[6].m = 0.0081;    // uranus
+    planet[7].m = 0.0102;    // neptune
+    planet[8].m = 100;       // sun
+
+    for (int i = 0; i < 9; i++)
     {
-        s[i].x = GetRandomValue(0, 1280);
-        s[i].y = GetRandomValue(0, 720);
-        s[i].a = 0;
+        planet[i].y = 360;
+        planet[i].vx = 0;
     }
-    // Initial positions
-    b[0].x = 540;
-    b[0].y = 260;
-    b[1].x = 540;
-    b[1].y = 460;
-    b[2].x = 740;
-    b[2].y = 260;
-    b[3].x = 740;
-    b[3].y = 46;
+    // scaled gravitational constant
+    int sun_index = 8; // Sun's index
 
-    // setting initial velocities of the planet 0
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 8; i++)
     {
-        b[i].vx = b[i].vy = 0;
+        double dx = planet[i].x - planet[sun_index].x;
+        double r = fabs(dx); // horizontal distance
+
+        // velocity magnitude for circular orbit
+        double v = sqrt(G * planet[sun_index].m / r);
+
+        // set vertical velocity
+        if (dx < 0)
+            planet[i].vy = v; // left of Sun, orbit clockwise
+        else
+            planet[i].vy = -v; // right of Sun, orbit counterclockwise
+
+        // horizontal velocity = 0
+        planet[i].vx = 0;
     }
 
-    body rb[4];
-
-    Force force[4] ;
-    for(int i=0;i<4;i++)
-    {
-        force[i].x=0;
-        force[i].y=0;
-    }
-
-    // Trails array
-    Vector2 trails[4][MAX_TRAIL];
-    int trailIndex = 0;
-
+    Force force[9];
+    double dt;
     while (!WindowShouldClose())
     {
-
+        dt = GetFrameTime();
         BeginDrawing();
+        ClearBackground(RAYWHITE);
         if (mainmenu)
         {
-            double dt = GetFrameTime();
-            // draw random stars at start of the window
-            for (int i = 0; i < 200; i++)
-
+            DrawText("Please Select Numerical Integrator", 500, 220, 19, WHITE);
+            if (GuiButton((Rectangle){610, 250, 80, 30}, "Euler"))
             {
-                if (s[i].a >= 255)
-                    t = 1;
-                if (s[i].a <= 0)
-                    t = 0;
-                if (t)
-                    s[i].a -= 20;
-                else
-                    s[i].a += 20;
+                mainmenu = 0;
+                integrator = 1;
             }
-            for (int i = 0; i < 200; i++)
+            else if (GuiButton((Rectangle){590, 285, 120, 30}, "Simplectic Euler"))
             {
-                Color c = {240, 240, 255, s[i].a};
-                DrawPixel(s[i].x, s[i].y, c);
+                mainmenu = 0;
+                integrator = 2;
             }
-            // Reset forces
-            if (!gamestate)
+            else if (GuiButton((Rectangle){610, 320, 80, 30}, "RK2"))
             {
-                
-                for (int i = 0; i < 4; i++)
-                {
-                    force[i].x = 0;
-                    force[i].y = 0;
-                }
-
-                // Compute forces
-                for (int i = 0; i < 4; i++)
-                {
-                    for (int j = i + 1; j < 4; j++)
-                    {
-                        Force f = computeForce(b[i], b[j]);
-                        force[i].x += f.x;
-                        force[i].y += f.y;
-                        force[j].x -= f.x;
-                        force[j].y -= f.y;
-                    }
-                }
-
-                // Update velocities
-                for (int i = 0; i < 4; i++)
-                {
-                    b[i].vx += force[i].x * dt;
-                    b[i].vy += force[i].y * dt;
-                }
-
-                // collision detection and aftermath
-                for (int i = 0; i < 4; i++)
-                {
-                    for (int j = i + 1; j < 4; j++)
-                    {
-                        double dx = b[i].x - b[j].x;
-                        double dy = b[i].y - b[j].y;
-                        double r = sqrt(dx * dx + dy * dy);
-                        if (r < 20)
-                        {
-                            collide(&b[i], &b[j]);
-                        }
-                    }
-                }
-                // Update positions
-                for (int i = 0; i < 4; i++)
-                {
-                    b[i].x += b[i].vx * dt;
-                    b[i].y += b[i].vy * dt;
-                }
+                mainmenu = 0;
+                integrator = 3;
             }
-            // Bounce from walls
-            for (int i = 0; i < 4; i++)
+            else if (GuiButton((Rectangle){610, 355, 80, 30}, "RK4"))
             {
-                if (b[i].x > 1270 || b[i].x < 10)
-                    b[i].vx = -b[i].vx;
-                if (b[i].y > 710 || b[i].y < 10)
-                    b[i].vy = -b[i].vy;
+                mainmenu = 0;
+                integrator = 4;
             }
-
-            // Store trails
-            for (int i = 0; i < 4; i++)
+            else if (GuiButton((Rectangle){610, 390, 80, 30}, "Leepfrog"))
             {
-                trails[i][trailIndex] = (Vector2){(float)b[i].x, (float)b[i].y};
+                mainmenu = 0;
+                integrator = 5;
             }
-            trailIndex = (trailIndex + 1) % MAX_TRAIL;
-
-            // Drawing
-            
-            // DrawRectangle for glowing trail and fading trail effect
-
-            DrawRectangle(0, 0, 1280, 720, Fade(BLACK, 0.2f));
-
-            if (GuiButton((Rectangle){20, 20, 80, 30}, "Play"))
-            {
-                gamestate = PLAY;
-            }
-
-            if (GuiButton((Rectangle){110, 20, 80, 30}, "Pause"))
-            {
-                gamestate = PAUSE;
-            }
-            if (GuiButton((Rectangle){200, 20, 80, 30}, "RESET"))
-            {
-                gamestate = PAUSE;
-                b[0].x = 540;
-                b[0].y = 260;
-                b[1].x = 540;
-                b[1].y = 460;
-                b[2].x = 740;
-                b[2].y = 260;
-                b[3].x = 740;
-                b[3].y = 460;
-                for (int i = 0; i < 4; i++)
-                {
-                    b[i].vx = b[i].vy = 0;
-                }
-                DrawRectangle(0, 0, 1280, 720, Fade(BLACK, 255));
-                trailIndex = 0;
-            }
-            if (GuiButton((Rectangle){20, 60, 80, 30}, "Show trail"))
-            {
-                trail = 1;
-            }
-            if (GuiButton((Rectangle){110, 60, 80, 30}, "Hide Trail"))
-            {
-                trail = 0;
-                trailIndex = 0;
-            }
-
-            // Draw trails
-            if (trail)
-            {
-                for (int i = 0; i < 4; i++)
-                {
-                    Color c = (i == 0 ? WHITE : (i == 1 ? RED : (i == 2 ? BLUE : GREEN)));
-                    for (int t = 0; t < MAX_TRAIL; t++)
-                    {
-                        DrawPixelV(trails[i][t], c);
-                    }
-                }
-            }
-
-            // Draw planets
-
-            DrawCircle(b[0].x, b[0].y, 10, WHITE);
-            DrawCircle(b[1].x, b[1].y, 10, RED);
-            DrawCircle(b[2].x, b[2].y, 10, BLUE);
-            DrawCircle(b[3].x, b[3].y, 10, GREEN);
-
-            // twinkling effect on stars
-            
         }
+        // main physics and drawing starts from here
+        else
+        {
+            for (int i = 0; i < 9; i++)
+            {
+                force[i].x = 0;
+                force[i].y = 0;
+            }
+            for (int i = 0; i < 9; i++)
+            {
+                for (int j = i + 1; j < 9; j++)
+                {
+                    Force f = computeForce(planet[i], planet[j]);
+                    force[i].x += f.x;
+                    force[i].y += f.y;
+                    force[j].x -= f.x;
+                    force[j].y -= f.y;
+                }
+            }
+            for (int i = 0; i < 9; i++)
+            {
+                updatePhysics(i, integrator, force[i], dt, planet);
+            }
 
-        else{
-            BeginDrawing();
-            DrawText("WELCOME",600,300,30,WHITE);
-            if(GuiButton((Rectangle){600,360,80,30},"START"))
-            mainmenu=1;
-            EndDrawing();
+            for (int i = 0; i < 9; i++)
+            {
+                DrawCircle(planet[i].x, planet[i].y, 2, GRAY);
+            }
         }
-
-            EndDrawing();
+        EndDrawing();
     }
     CloseWindow();
-    return 0;
 }
