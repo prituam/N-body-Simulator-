@@ -8,15 +8,16 @@ double energyarr[GRAPH_N];
 int idx = 0;
 double scale = 1e11;
 const int x0 = 900;
-const int yo = 180;
+const int yo = 220;
 const double scaleE = 1e-31; // adjustable
-
+int planetselected = -1;
 int mainmenu = 1;
 int integrator;
 int play = 1;
-const double G = 0.2;
+const double G = 20;
 const double energyFactor = 6.6e33;
-
+int leapfroginit = 0;
+int energyinit = 0;
 typedef struct
 {
     double x, y, vx, vy, m, r;
@@ -39,11 +40,45 @@ Force computeForce(Body a, Body b)
     f.y = mag * dy;
     return f;
 }
+double KE(Body p[], Force f[], int integrator, double dt)
+{
+    double ke = 0.0;
+
+    for (int i = 0; i < 9; i++)
+    {
+        double vx, vy;
+
+        vx = p[i].vx;
+        vy = p[i].vy;
+
+        ke += 0.5 * p[i].m * (vx * vx + vy * vy);
+    }
+    return ke;
+}
+
+double PE(Body p[])
+{
+    double pe = 0.0;
+    for (int i = 0; i < 9; i++)
+        for (int j = i + 1; j < 9; j++)
+        {
+            double dx = p[j].x - p[i].x;
+            double dy = p[j].y - p[i].y;
+            double r = sqrt(dx * dx + dy * dy + 1e-6);
+            pe -= G * p[i].m * p[j].m / r;
+        }
+    return pe;
+}
+
+double calcTE(Body p[], Force force[], double dt)
+{
+    return KE(p, force, integrator, dt) + PE(p);
+}
 
 void applyRK2(double dt, Body p[], Force f[])
 {
-    DrawText("RK2",x0+120,yo-150,12,WHITE);
-    scale = 1e9;
+    DrawText("RK2", x0 + 120, yo - 150, 12, WHITE);
+    scale = 1e13;
     int n = 9;
     Body temp[9];
     Force f_mid[9];
@@ -81,8 +116,8 @@ void applyRK2(double dt, Body p[], Force f[])
         double ay_mid = f_mid[i].y / p[i].m;
 
         // Positions updated using **mid-step velocities**
-        p[i].x += (p[i].vx + 0.5 * ax_mid * dt) * dt;
-        p[i].y += (p[i].vy + 0.5 * ay_mid * dt) * dt;
+        p[i].x += temp[i].vx * dt;
+        p[i].y += temp[i].vy * dt;
 
         // Velocities updated using **mid-step accelerations**
         p[i].vx += ax_mid * dt;
@@ -95,25 +130,27 @@ void updatePhysics(int i, int integrator, Force f, double dt, Body p[], Force fo
     switch (integrator)
     {
     case 1: // Euler
-        DrawText("Euler",x0+120,yo-150,12,WHITE);
-        scale = 1e8;
+        DrawText("Euler", x0 + 120, yo - 150, 12, WHITE);
+        scale = 1e7;
         p[i].x += p[i].vx * dt;
         p[i].y += p[i].vy * dt;
         p[i].vx += (f.x / p[i].m) * dt;
         p[i].vy += (f.y / p[i].m) * dt;
+
         break;
     case 2: // Symplectic Euler
-        scale=1e9;
-        DrawText("Simplectic Euler",x0+120,yo-150,12,WHITE);
+        scale = 1e9;
+        DrawText("Simplectic Euler", x0 + 120, yo - 150, 12, WHITE);
         p[i].vx += (f.x / p[i].m) * dt;
         p[i].vy += (f.y / p[i].m) * dt;
         p[i].x += p[i].vx * dt;
         p[i].y += p[i].vy * dt;
+
         break;
     case 4: // RK4
     {
-        DrawText("RK4",x0+120,yo-150,12,WHITE);
-        scale = 1e10d;
+        DrawText("RK4", x0 + 120, yo - 150, 12, WHITE);
+        scale = 1e12;
         double x0 = p[i].x, y0 = p[i].y;
         double vx0 = p[i].vx, vy0 = p[i].vy;
         double m = p[i].m;
@@ -164,6 +201,7 @@ void updatePhysics(int i, int integrator, Force f, double dt, Body p[], Force fo
         p[i].y += dt / 6 * (k1_y + 2 * k2_y + 2 * k3_y + k4_y);
         p[i].vx += dt / 6 * (k1_vx + 2 * k2_vx + 2 * k3_vx + k4_vx);
         p[i].vy += dt / 6 * (k1_vy + 2 * k2_vy + 2 * k3_vy + k4_vy);
+
         break;
     }
     default:
@@ -173,8 +211,8 @@ void updatePhysics(int i, int integrator, Force f, double dt, Body p[], Force fo
 
 void applyLeapfrog(double dt, Body p[], Force f[])
 {
-    DrawText("Leapfrog(short x axis)",x0+120,yo-150,12,WHITE);
-    scale = 4*1e8;
+    DrawText("Leapfrog(short x axis)", x0 + 120, yo - 150, 12, WHITE);
+    scale = 1e12;
     int n = 9;
     Force newF[9];
 
@@ -215,66 +253,76 @@ void applyLeapfrog(double dt, Body p[], Force f[])
     // Copy new forces back
     for (int i = 0; i < n; i++)
         f[i] = newF[i];
-        
 }
 
 void initialize(Body planet[])
 {
     int sun_index = 8;
-    planet[0].x = 648;
-    planet[0].y = 360;
+
+    planet[0].x = 600; // Mercury
+
     planet[0].vx = 0;
     planet[0].vy = 0;
     planet[0].m = 0.0000165;
-    planet[0].r = 2;
-    planet[1].x = 654;
-    planet[1].y = 360;
+    planet[0].r = 4;
+
+    planet[1].x = 630; // Venus
+
     planet[1].vx = 0;
     planet[1].vy = 0;
     planet[1].m = 0.000245;
-    planet[1].r = 2;
-    planet[2].x = 660;
-    planet[2].y = 360;
+    planet[1].r = 3;
+
+    planet[2].x = 660; // Earth
+
     planet[2].vx = 0;
     planet[2].vy = 0;
     planet[2].m = 0.0003;
-    planet[2].r = 2;
-    planet[3].x = 670;
-    planet[3].y = 360;
+    planet[2].r = 5.5;
+
+    planet[3].x = 700; // Mars
+
     planet[3].vx = 0;
     planet[3].vy = 0;
     planet[3].m = 0.000032;
-    planet[3].r = 2;
-    planet[4].x = 744;
-    planet[4].y = 360;
+    planet[3].r = 6;
+
+    planet[4].x = 760; // Jupiter
+
     planet[4].vx = 0;
     planet[4].vy = 0;
     planet[4].m = 0.0954;
-    planet[4].r = 3;
-    planet[5].x = 832;
-    planet[5].y = 360;
+    planet[4].r = 9;
+
+    planet[5].x = 860; // Saturn
+
     planet[5].vx = 0;
     planet[5].vy = 0;
     planet[5].m = 0.0544;
-    planet[5].r = 2.5;
-    planet[6].x = 1024;
-    planet[6].y = 360;
+    planet[5].r = 8;
+
+    planet[6].x = 1020; // Uranus
+
     planet[6].vx = 0;
     planet[6].vy = 0;
     planet[6].m = 0.0081;
-    planet[6].r = 2;
-    planet[7].x = 1241;
-    planet[7].y = 360;
+    planet[6].r = 6;
+
+    planet[7].x = 1200; // Neptune
+
     planet[7].vx = 0;
     planet[7].vy = 0;
     planet[7].m = 0.0102;
-    planet[7].r = 2;
+    planet[7].r = 6;
+
     planet[8].x = 640;
-    planet[8].y = 360;
+
     planet[8].vx = 0;
     planet[8].vy = 0;
     planet[8].m = 100;
-    planet[8].r = 3;
+    planet[8].r = 6;
+    planet[8].y = 360;
+
     planet[0].c = (Color){255, 255, 204, 255}; // mercury
     planet[1].c = (Color){255, 128, 0, 255};   // venus
     planet[2].c = (Color){51, 255, 255, 255};  // earth
@@ -285,13 +333,14 @@ void initialize(Body planet[])
     planet[7].c = (Color){102, 102, 255, 255}; // neptune
     planet[8].c = (Color){255, 255, 153, 255}; // sun
 
-    // Initialize circular velocities around Sun
     for (int i = 0; i < 8; i++)
     {
         double dx = planet[i].x - planet[sun_index].x;
         double r = fabs(dx);
         double v = sqrt(G * planet[sun_index].m / r);
-        planet[i].vy = (dx < 0) ? v : -v;
+
+        planet[i].vy = ((dx < 0) ? v : -v);
+        planet[i].y = 360 + i * 0.5;
     }
 
     double Px = 0, Py = 0;
@@ -303,49 +352,33 @@ void initialize(Body planet[])
     planet[sun_index].vx = -Px / planet[sun_index].m;
     planet[sun_index].vy = -Py / planet[sun_index].m;
 }
-void getPhysicalVelocity(int integrator,Body *p,Force *f,double dt,double *vx,double *vy)
+
+void showvector(Body a)
 {
-    if (integrator == 5)
-    {
-        *vx = p->vx - f->x / p->m * dt * 0.5;
-        *vy = p->vy - f->y / p->m * dt * 0.5;
-    }
-    else
-    {
-        *vx = p->vx;
-        *vy = p->vy;
-    }
-}
+    float L = 8.0f;
+    float xa = a.x + L * a.vx;
+    float ya = a.y + L * a.vy;
+float dx = a.vx ;
+float dy = a.vy ;
+    DrawLine(a.x, a.y, xa, ya, WHITE);
+    float h = 1.0f;
+    float c = cosf(PI / 6.0f);
+    float s = sinf(PI / 6.0f);
+    float x1 = xa - h * (dx * c - dy * s);
+    float y1 = ya - h * (dx * s + dy * c);
 
-double KE(Body p[], Force f[], double dt, int integrator)
+    float x2 = xa - h * (dx * c + dy * s);
+    float y2 = ya - h * (-dx * s + dy * c);
+DrawLine(xa, ya, x1, y1, WHITE);        // left head
+DrawLine(xa, ya, x2, y2, WHITE); 
+    
+}
+double vecdist(Body a, Vector2 b)
 {
-    double KE = 0.0;
-
-    for (int i = 0; i < 9; i++)
-    {
-        double vx, vy;
-        getPhysicalVelocity(integrator, &p[i], &f[i], dt, &vx, &vy);
-        KE += 0.5 * p[i].m * (vx*vx + vy*vy);
-    }
-    return KE;
+    double dx = a.x - b.x;
+    double dy = a.y - b.y;
+    return sqrt(dx * dx + dy * dy);
 }
-
-double PE(Body p[], int k)
-{
-    double u = 0;
-    for (int i = 0; i < 9; i++)
-    {
-        if (i != k)
-        {
-            double dx = p[k].x - p[i].x, dy = p[k].y - p[i].y;
-            double r = sqrt(dx * dx + dy * dy + 1e-6);
-            u -= G * p[k].m * p[i].m * energyFactor / r;
-        }
-    }
-    return u;
-}
-
-
 int main()
 {
     int x = 1000;
@@ -368,29 +401,10 @@ int main()
     while (!WindowShouldClose())
     {
         x = 1000;
-        TE = TKE = TU = 0;
-        dt = 0.002;
+        dt = 0.0002;
         BeginDrawing();
         ClearBackground(BLACK);
 
-        // Compute energies
-        for (int i = 0; i < 9; i++)
-            TKE += KE(planet,force,dt,integrator);
-        for (int i = 0; i < 9; i++)
-            for (int j = i + 1; j < 9; j++)
-            {
-                double dx = planet[j].x - planet[i].x;
-                double dy = planet[j].y - planet[i].y;
-                double r = sqrt(dx * dx + dy * dy + 1e-6);
-                TU -= G * planet[i].m * planet[j].m * energyFactor / r;
-            }
-        TE = TKE + TU;
-        if (!d)
-        {
-            TE0 = TE;
-            d++;
-        }
-        // GUI menu and buttons
         if (mainmenu)
         {
             DrawText("Please Select Numerical Integrator", 500, 220, 19, WHITE);
@@ -427,32 +441,49 @@ int main()
         }
         else
         {
-            int r=64;
-            int ry=36;
-            for(int i=0;i<19;i++)
-            {
-                DrawLine(0,ry,1280,ry,(Color){255,255,255,40});
-                DrawLine(r,0,r,720,(Color){255,255,255,40});
-                r+=64;
-                ry+=36;
-            }
             DrawText(TextFormat("Energy: %.8e", TE), 30, 140, 16, WHITE);
             if (GuiButton((Rectangle){13, 10, 175, 30}, "Change Integrator"))
             {
                 idx = 0;
-                TE0=TE;
                 mainmenu = 1;
+                leapfroginit = 0;
+                energyinit = 0;
                 PlaySound(clickSound);
-                ClearBackground(    BLACK);
+                ClearBackground(BLACK);
                 initialize(planet);
+                for (int i = 0; i < 9; i++)
+                    force[i] = (Force){0, 0};
+
+                for (int i = 0; i < 9; i++)
+                    for (int j = i + 1; j < 9; j++)
+                    {
+                        Force f = computeForce(planet[i], planet[j]);
+                        force[i].x += f.x;
+                        force[i].y += f.y;
+                        force[j].x -= f.x;
+                        force[j].y -= f.y;
+                    }
             }
             if (GuiButton((Rectangle){13, 45, 175, 30}, "Reset Simulation"))
             {
                 d = 0;
-                idx=0;
-                ClearBackground(    BLACK);
+                idx = 0;
+                leapfroginit = 0;
+                energyinit = 0;
+
+                ClearBackground(BLACK);
                 initialize(planet);
                 PlaySound(clickSound);
+            }
+
+            if (GuiButton((Rectangle){190, 10, 175, 30}, "Rescale Graph"))
+            {
+                ClearBackground(BLACK);
+                TE0 = TE;
+                for (int i = 0; i < GRAPH_N - 1; i++)
+                {
+                    energyarr[i] = 0;
+                }
             }
             if (!play)
             {
@@ -470,53 +501,39 @@ int main()
                     PlaySound(clickSound);
                 }
             }
-            if (GuiButton((Rectangle){190, 10, 175, 30}, "Rescale Graph"))
+            Vector2 mouse = GetMousePosition();
+            int r = 64;
+            int ry = 36;
+            int minIndex = -1;
+            float minDist = 1e30; // very large number
+
+            for (int i = 0; i < 9; i++)
             {
-                ClearBackground(BLACK);
-               TE0=TE;
-               for(int i=0;i<GRAPH_N-1;i++)
-                    {
-                        energyarr[i]=0;
-                    }
+                float d = vecdist(planet[i], mouse);
+                if (d < minDist)
+                {
+                    minDist = d;
+                    minIndex = i;
+                }
+            }
+            if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+            {
+                if (minIndex != -1 && minDist <= planet[minIndex].r)
+                {
+                    planetselected = 1;
+                }
+            }
+            if (planetselected)
+                showvector(planet[minIndex]);
+            for (int i = 0; i < 19; i++)
+            {
+                DrawLine(0, ry, 1280, ry, (Color){255, 255, 255, 40});
+                DrawLine(r, 0, r, 720, (Color){255, 255, 255, 40});
+                r += 64;
+                ry += 36;
             }
             if (play)
             {
-                if(idx>=GRAPH_N)
-                {
-                    for(int i=0;i<GRAPH_N-1;i++)
-                    {
-                        energyarr[i]=energyarr[i+1];
-                    }
-                    energyarr[GRAPH_N-1]=TE;
-                }
-                if (idx < GRAPH_N)
-                {
-                    energyarr[idx] = TE;
-                    idx++;
-                }
-                DrawText("rel. error in TE",x0-100,yo-100,12,WHITE);
-                DrawLine(x0, yo, x0 + GRAPH_N, yo, WHITE);
-                DrawLine(x0, yo - 150, x0, yo, WHITE);
-
-                for (int i = 0; i < idx; i++)
-                {
-                    int x = x0 + i/3;
-                    double y = yo + scale * (energyarr[i] - TE0) / TE0;
-                    DrawPixel(x, y, BLUE);
-                }
-
-                for (int i = 0; i < 9; i++)
-                {
-                    fprintf(fp, "%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6e,%.6e,%.6e\n",
-                            i, t,
-                            planet[i].x, planet[i].y,
-                            planet[i].vx, planet[i].vy,
-                            KE(planet, force,dt,integrator),
-                            PE(planet, i),
-                            KE(planet, force,dt,integrator) + PE(planet, i));
-                }
-
-                t += dt;
                 if (integrator != 5)
                 {
                     for (int i = 0; i < 9; i++)
@@ -533,25 +550,79 @@ int main()
                 }
                 if (integrator == 3)
                     applyRK2(dt, planet, force);
+
                 else if (integrator == 5)
+                {
+                    if (!leapfroginit)
+                    {
+                        for (int i = 0; i < 9; i++)
+                            force[i] = (Force){0, 0};
+                        for (int i = 0; i < 9; i++)
+                            for (int j = i + 1; j < 9; j++)
+                            {
+                                Force f = computeForce(planet[i], planet[j]);
+                                force[i].x += f.x;
+                                force[i].y += f.y;
+                                force[j].x -= f.x;
+                                force[j].y -= f.y;
+                            }
+                        leapfroginit = 1;
+                    }
                     applyLeapfrog(dt, planet, force);
+                }
                 else
                     for (int i = 0; i < 9; i++)
                         updatePhysics(i, integrator, force[i], dt, planet, force);
-            }
 
+                TE = calcTE(planet, force, dt);
+                if (!energyinit)
+                {
+                    TE0 = TE;
+                    energyinit = 1;
+                }
+
+                if (energyinit)
+                {
+                    if (idx >= GRAPH_N)
+                    {
+                        for (int i = 0; i < GRAPH_N - 1; i++)
+                        {
+                            energyarr[i] = energyarr[i + 1];
+                        }
+                        energyarr[GRAPH_N - 1] = TE;
+                    }
+                    if (idx < GRAPH_N)
+                    {
+                        energyarr[idx] = TE;
+                        idx++;
+                    }
+                }
+                for (int i = 0; i < 9; i++)
+                {
+                    fprintf(fp, "%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6e,%.6e,%.6e\n",
+                            i, t,
+                            planet[i].x, planet[i].y,
+                            planet[i].vx, planet[i].vy,
+                            KE(planet, force, integrator, dt),
+                            PE(planet),
+                            KE(planet, force, integrator, dt) + PE(planet));
+                }
+
+                t += dt;
+            }
             for (int i = 0; i < 9; i++)
             {
-                if (i == 8)
-                {
-
-                    DrawCircle(planet[i].x, planet[i].y, planet[i].r, planet[i].c);
-                    DrawCircle(planet[i].x, planet[i].y, planet[i].r + 1, (Color){255, 255, 153, 150});
-                    DrawCircle(planet[i].x, planet[i].y, planet[i].r + 2, (Color){255, 255, 153, 90});
-                }
-                else
-                    DrawCircle(planet[i].x, planet[i].y, planet[i].r, planet[i].c);
+                DrawCircle(planet[i].x, planet[i].y, planet[i].r, planet[i].c);
             }
+            for (int i = 0; i < idx; i++)
+            {
+                int x = x0 + i / 3;
+                double y = yo + scale * (energyarr[i] - TE0) / TE0;
+                DrawPixel(x, y, BLUE);
+            }
+            DrawText("rel. error in TE", x0 - 100, yo - 100, 12, WHITE);
+            DrawLine(x0, yo, x0 + 300, yo, WHITE);
+            DrawLine(x0, yo - 200, x0, yo, WHITE);
         }
 
         EndDrawing();
