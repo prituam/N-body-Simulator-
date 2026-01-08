@@ -160,42 +160,40 @@ The graph shows relative energy error:
 
 This allows further analysis using Python / MATLAB / Excel.
 
-Dependencies
+## Dependencies
 
-C compiler (GCC recommended)
+- C compiler (GCC recommended)
 
-Raylib
+- Raylib
 
-raygui
+- raygui
 
-How to Run
-gcc main.c -o simulator -lraylib -lm
-./simulator
-
-
+## How to Run
+- gcc main.c -o simulator -lraylib -lm
+- ./simulator
 (Adjust library paths if needed.)
 
-What This Project Demonstrates
+## What This Project Demonstrates
 
-Practical implementation of numerical integrators
+- Practical implementation of numerical integrators
 
-Understanding of Hamiltonian dynamics
+- Understanding of Hamiltonian dynamics
 
-Importance of symplectic methods
+- Importance of symplectic methods
 
-Numerical error analysis
+- Numerical error analysis
 
-Scientific visualization
+- Scientific visualization
 
-Future Improvements (Not Implemented)
+## Future Improvements (Not Implemented)
 
-Adaptive time stepping
+- Adaptive time stepping
 
-Angular momentum diagnostics
+- Angular momentum diagnostics
 
-3D extension
+- 3D extension
 
-Relativistic corrections
+- Relativistic corrections
 
 These were intentionally avoided to keep the focus on numerical behavior.
 
