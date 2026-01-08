@@ -18,6 +18,7 @@ const double G = 20;
 const double energyFactor = 6.6e33;
 int leapfroginit = 0;
 int energyinit = 0;
+int showVelVector=1;
 typedef struct
 {
     double x, y, vx, vy, m, r;
@@ -124,7 +125,140 @@ void applyRK2(double dt, Body p[], Force f[])
         p[i].vy += ay_mid * dt;
     }
 }
+void applyRK4(double dt, Body p[], Force f[])
+{
+    DrawText("RK4", x0 + 120, yo - 150, 12, WHITE);
+    scale = 1e15;
+    // double x0 = p[i].x, y0 = p[i].y;
+    // double vx0 = p[i].vx, vy0 = p[i].vy;
+    double k1_x[9];
+    double k1_vx[9];
+    double k1_y[9];
+    double k1_vy[9];
+    Force f1[9] = {0};
+    for (int i = 0; i < 9; i++)
+        for (int j = i + 1; j < 9; j++)
+        {
+            Force fij = computeForce(p[i], p[j]);
+            f1[i].x += fij.x;
+            f1[i].y += fij.y;
+            f1[j].x -= fij.x;
+            f1[j].y -= fij.y;
+        }
 
+    for (int i = 0; i < 9; i++)
+    {
+        k1_x[i] = p[i].vx;
+        k1_vx[i] = f1[i].x / p[i].m;
+        k1_y[i] = p[i].vy;
+        k1_vy[i] = f1[i].y / p[i].m;
+    }
+    Body s2[9];
+    for (int i = 0; i < 9; i++)
+    {
+        s2[i] = (Body){p[i].x + k1_x[i] * dt / 2, p[i].y + k1_y[i] * dt / 2, p[i].vx + k1_vx[i] * dt / 2, p[i].vy + k1_vy[i] * dt / 2, p[i].m, 0};
+    }
+
+    Force f2[9];
+    for (int i = 0; i < 9; i++)
+    {
+        f2[i] = (Force){0, 0};
+    }
+
+    for (int i = 0; i < 9; i++)
+        for (int j = i + 1; j < 9; j++)
+        {
+            Force fx = computeForce(s2[i], s2[j]);
+            f2[i].x += fx.x;
+            f2[i].y += fx.y;
+            f2[j].x -= fx.x;
+            f2[j].y -= fx.y;
+        }
+
+    double k2_x[9];
+    double k2_vx[9];
+    double k2_y[9];
+    double k2_vy[9];
+    for (int i = 0; i < 9; i++)
+    {
+        k2_x[i] = s2[i].vx;
+        k2_vx[i] = f2[i].x / s2[i].m;
+        k2_y[i] = s2[i].vy;
+        k2_vy[i] = f2[i].y / s2[i].m;
+    }
+    Body s3[9];
+    for (int i = 0; i < 9; i++)
+    {
+        s3[i] = (Body){p[i].x + k2_x[i] * dt / 2, p[i].y + k2_y[i] * dt / 2, p[i].vx + k2_vx[i] * dt / 2, p[i].vy + k2_vy[i] * dt / 2, p[i].m, 0};
+    }
+    Force f3[9];
+    for (int i = 0; i < 9; i++)
+    {
+        f3[i] = (Force){0, 0};
+    }
+
+    for (int i = 0; i < 9; i++)
+        for (int j = i + 1; j < 9; j++)
+        {
+            Force fx = computeForce(s3[i], s3[j]);
+            f3[i].x += fx.x;
+            f3[i].y += fx.y;
+            f3[j].x -= fx.x;
+            f3[j].y -= fx.y;
+        }
+
+    double k3_x[9];
+    double k3_vx[9];
+    double k3_y[9];
+    double k3_vy[9];
+    for (int i = 0; i < 9; i++)
+    {
+        k3_x[i] = s3[i].vx;
+        k3_vx[i] = f3[i].x / s3[i].m;
+        k3_y[i] = s3[i].vy;
+        k3_vy[i] = f3[i].y / s3[i].m;
+    }
+    Body s4[9];
+    for (int i = 0; i < 9; i++)
+    {
+        s4[i] = (Body){p[i].x + k3_x[i] * dt, p[i].y + k3_y[i] * dt, p[i].vx + k3_vx[i] * dt, p[i].vy + k3_vy[i] * dt, p[i].m, 0};
+    }
+    Force f4[9];
+    for (int i = 0; i < 9; i++)
+    {
+        f4[i] = (Force){0, 0};
+    }
+
+    for (int i = 0; i < 9; i++)
+        for (int j = i + 1; j < 9; j++)
+        {
+            Force fx = computeForce(s4[i], s4[j]);
+            f4[i].x += fx.x;
+            f4[i].y += fx.y;
+            f4[j].x -= fx.x;
+            f4[j].y -= fx.y;
+        }
+
+    double k4_x[9];
+    double k4_vx[9];
+    double k4_y[9];
+    double k4_vy[9];
+    for (int i = 0; i < 9; i++)
+    {
+        k4_x[i] = s4[i].vx;
+        k4_vx[i] = f4[i].x / s4[i].m;
+        k4_y[i] = s4[i].vy;
+        k4_vy[i] = f4[i].y / s4[i].m;
+    }
+    for (int i = 0; i < 9; i++)
+    {
+        p[i].x += dt / 6 * (k1_x[i] + 2 * k2_x[i] + 2 * k3_x[i] + k4_x[i]);
+        p[i].y += dt / 6 * (k1_y[i] + 2 * k2_y[i] + 2 * k3_y[i] + k4_y[i]);
+        p[i].vx += dt / 6 * (k1_vx[i] + 2 * k2_vx[i] + 2 * k3_vx[i] + k4_vx[i]);
+
+        p[i].vy += dt / 6 * (k1_vy[i] + 2 * k2_vy[i] + 2 * k3_vy[i] + k4_vy[i]);
+    }
+}
 void updatePhysics(int i, int integrator, Force f, double dt, Body p[], Force fo[])
 {
     switch (integrator)
@@ -147,63 +281,6 @@ void updatePhysics(int i, int integrator, Force f, double dt, Body p[], Force fo
         p[i].y += p[i].vy * dt;
 
         break;
-    case 4: // RK4
-    {
-        DrawText("RK4", x0 + 120, yo - 150, 12, WHITE);
-        scale = 1e12;
-        double x0 = p[i].x, y0 = p[i].y;
-        double vx0 = p[i].vx, vy0 = p[i].vy;
-        double m = p[i].m;
-
-        double k1_x = vx0, k1_y = vy0;
-        double k1_vx = f.x / m, k1_vy = f.y / m;
-
-        Body s2 = {x0 + k1_x * dt / 2, y0 + k1_y * dt / 2, vx0 + k1_vx * dt / 2, vy0 + k1_vy * dt / 2, m, 0};
-        Force f2 = {0, 0};
-        for (int j = 0; j < 9; j++)
-            if (j != i)
-            {
-                Force ff = computeForce(s2, p[j]);
-                f2.x += ff.x;
-                f2.y += ff.y;
-            }
-
-        double k2_x = s2.vx, k2_y = s2.vy;
-        double k2_vx = f2.x / m, k2_vy = f2.y / m;
-
-        Body s3 = {x0 + k2_x * dt / 2, y0 + k2_y * dt / 2, vx0 + k2_vx * dt / 2, vy0 + k2_vy * dt / 2, m, 0};
-        Force f3 = {0, 0};
-        for (int j = 0; j < 9; j++)
-            if (j != i)
-            {
-                Force ff = computeForce(s3, p[j]);
-                f3.x += ff.x;
-                f3.y += ff.y;
-            }
-
-        double k3_x = s3.vx, k3_y = s3.vy;
-        double k3_vx = f3.x / m, k3_vy = f3.y / m;
-
-        Body s4 = {x0 + k3_x * dt, y0 + k3_y * dt, vx0 + k3_vx * dt, vy0 + k3_vy * dt, m, 0};
-        Force f4 = {0, 0};
-        for (int j = 0; j < 9; j++)
-            if (j != i)
-            {
-                Force ff = computeForce(s4, p[j]);
-                f4.x += ff.x;
-                f4.y += ff.y;
-            }
-
-        double k4_x = s4.vx, k4_y = s4.vy;
-        double k4_vx = f4.x / m, k4_vy = f4.y / m;
-
-        p[i].x += dt / 6 * (k1_x + 2 * k2_x + 2 * k3_x + k4_x);
-        p[i].y += dt / 6 * (k1_y + 2 * k2_y + 2 * k3_y + k4_y);
-        p[i].vx += dt / 6 * (k1_vx + 2 * k2_vx + 2 * k3_vx + k4_vx);
-        p[i].vy += dt / 6 * (k1_vy + 2 * k2_vy + 2 * k3_vy + k4_vy);
-
-        break;
-    }
     default:
         break;
     }
@@ -358,8 +435,8 @@ void showvector(Body a)
     float L = 8.0f;
     float xa = a.x + L * a.vx;
     float ya = a.y + L * a.vy;
-float dx = a.vx ;
-float dy = a.vy ;
+    float dx = a.vx;
+    float dy = a.vy;
     DrawLine(a.x, a.y, xa, ya, WHITE);
     float h = 1.0f;
     float c = cosf(PI / 6.0f);
@@ -369,9 +446,8 @@ float dy = a.vy ;
 
     float x2 = xa - h * (dx * c + dy * s);
     float y2 = ya - h * (-dx * s + dy * c);
-DrawLine(xa, ya, x1, y1, WHITE);        // left head
-DrawLine(xa, ya, x2, y2, WHITE); 
-    
+    DrawLine(xa, ya, x1, y1, WHITE); // left head
+    DrawLine(xa, ya, x2, y2, WHITE);
 }
 double vecdist(Body a, Vector2 b)
 {
@@ -487,7 +563,7 @@ int main()
             }
             if (!play)
             {
-                if (GuiButton((Rectangle){13, 80, 175, 30}, "Play Simulation"))
+                if (GuiButton((Rectangle){190, 80, 175, 30}, "Play Simulation"))
                 {
                     play = 1;
                     PlaySound(clickSound);
@@ -495,9 +571,25 @@ int main()
             }
             else
             {
-                if (GuiButton((Rectangle){13, 80, 175, 30}, "Pause Simulation"))
+                if (GuiButton((Rectangle){190, 80, 175, 30}, "Pause Simulation"))
                 {
                     play = 0;
+                    PlaySound(clickSound);
+                }
+            }
+            if (!showVelVector)
+            {
+                if (GuiButton((Rectangle){13, 80, 175, 30}, "Show Velocity Vector"))
+                {
+                    showVelVector = 1;
+                    PlaySound(clickSound);
+                }
+            }
+            else
+            {
+                if (GuiButton((Rectangle){13, 80, 175, 30}, "Hide Velocity Vector"))
+                {
+                    showVelVector = 0;
                     PlaySound(clickSound);
                 }
             }
@@ -523,6 +615,7 @@ int main()
                     planetselected = 1;
                 }
             }
+            if(showVelVector)
             if (planetselected)
                 showvector(planet[minIndex]);
             for (int i = 0; i < 19; i++)
@@ -569,6 +662,10 @@ int main()
                         leapfroginit = 1;
                     }
                     applyLeapfrog(dt, planet, force);
+                }
+                else if (integrator == 4)
+                {
+                    applyRK4(dt, planet, force);
                 }
                 else
                     for (int i = 0; i < 9; i++)
