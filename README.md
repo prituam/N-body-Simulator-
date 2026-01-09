@@ -106,9 +106,9 @@ The total energy is computed as:
 
 Where:
 
-𝐾=∑1/2𝑚𝑣^2
+𝐾=∑1/2𝑚𝑣²
 
-𝑈=−∑𝑖<𝑗𝐺𝑚𝑖𝑚𝑗𝑟𝑖𝑗
+𝑈=−GMm/r
 ​
 The graph shows relative energy error:
 
