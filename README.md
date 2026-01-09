@@ -86,7 +86,7 @@ This project explores:
 
 Newtonian gravity:
 
-- F = GMm/|r|^3
+- F = GMm/r²
 
 - Softening term added to avoid singularities:
 
