@@ -28,11 +28,11 @@ This project explores:
 
 3. Real-time visualization of:
 
-4. Orbits
+- Orbits
 
-5. Velocity vectors
+- Velocity vectors
 
-6. Relative total energy error
+- Relative total energy error
 
 7. Export of simulation data to CSV
 
