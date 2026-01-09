@@ -1,6 +1,6 @@
 # N-Body Gravitational Simulation with Numerical Integrators
 
-## Overview ------------------
+## Overview ------------------ 
 
 This project is an interactive 2D N-body gravitational simulation written in C using Raylib.
 It simulates a simplified solar system and compares different numerical time-integration schemes by analyzing energy conservation.
